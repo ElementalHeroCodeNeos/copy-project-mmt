@@ -38,7 +38,9 @@
 # Log của Đỗ Đăng Huy
 | # | Date | Member | Tool / model | Task — what you asked | What AI produced | What you kept, changed or rejected — and how you verified it | Files |
 |:-:|------|--------|--------------|-----------------------|------------------|---------------------------------------------------------------|-------|
-| 1 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 2: chốt giao diện storage.py cùng Khôi (bảng users, rooms, room_members) | 11 điểm cần chốt kèm phương án và đánh đổi; storage.py chỉ có giao diện (11 hàm, docstring, lược đồ 3 bảng) | Bỏ delete_room và remove_member vì không có chỗ nào gọi.Chạy lệnh kiểm tra | server/src/storage.py |
+| 1 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 2: chốt giao diện storage.py cùng Khôi (bảng users, rooms, room_members) | 11 điểm cần chốt kèm phương án và đánh đổi; storage.py chỉ có giao diện (11 hàm, docstring, lược đồ 3 bảng) | Bỏ delete_room và remove_member vì không có chỗ nào gọi. Chạy lệnh kiểm tra | server/src/storage.py |
+| 2 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 3: băm và kiểm tra mật khẩu | auth.py (pbkdf2_hmac sha256 600.000 vòng, salt 16 byte, chuẩn hoá NFC, compare_digest); 8 unit test; 7 điểm cần chốt kèm đánh đổi | | server/src/auth.py, tests/test_auth.py |
+
 
 
  
