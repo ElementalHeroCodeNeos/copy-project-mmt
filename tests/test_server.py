@@ -77,7 +77,15 @@ class Client:
         self.sock.close()
 
 
-class ServerTest(unittest.TestCase):
+class ServerHarness(unittest.TestCase):
+    """Khởi động một server thật cho mỗi test và các hàm trợ giúp dùng chung.
+
+    Lớp con đổi cấu hình server bằng `ENV` (ví dụ {"MAX_CLIENTS": "50"}). Lớp này không có test
+    nào, nên lớp con không chạy lại test của ServerTest.
+    """
+
+    ENV: dict[str, str] = {}
+
     def setUp(self):
         self.port = _free_port()
         # Mỗi test một database rỗng trong thư mục tạm, không đụng /app/data (Huy, bước 4).
@@ -88,6 +96,7 @@ class ServerTest(unittest.TestCase):
                    MAX_MESSAGE_BYTES=str(MAX_BYTES), MAX_TEXT_CHARS=str(MAX_TEXT),
                    LOG_LEVEL="INFO", DATA_DIR=self.data_dir,
                    PYTHONPATH=str(ROOT), PYTHONIOENCODING="utf-8")
+        env.update(self.ENV)
         self.proc = subprocess.Popen([sys.executable, "-u", str(SERVER)], env=env,
                                      stderr=subprocess.PIPE, text=True, encoding="utf-8")
         self.logs: list[str] = []
@@ -116,6 +125,66 @@ class ServerTest(unittest.TestCase):
         c = Client(self.port)
         self.clients.append(c)
         return c
+
+    def request(self, c: Client, command: str, payload: dict) -> dict:
+        c.send(encode({"command": command, "payload": payload}))
+        return c.recv_msg()
+
+    def register(self, c: Client, name: str, password: str = PASSWORD) -> dict:
+        return self.request(c, "REGISTER", {"username": name, "password": password})
+
+    def send_login(self, c: Client, name: str, password: str = PASSWORD) -> dict:
+        return self.request(c, "LOGIN", {"username": name, "password": password})
+
+    def login(self, name: str, register: bool = True) -> Client:
+        """Kết nối mới, đăng ký (bỏ qua nếu đã có) rồi đăng nhập."""
+        c = self.connect()
+        if register:
+            self.assertIn(self.register(c, name)["code"], (201, 409))
+        msg = self.send_login(c, name)
+        self.assertEqual((msg["command"], msg["code"]), ("LOGIN_RESPONSE", 200), msg)
+        return c
+
+    def logins(self, *names: str) -> list[Client]:
+        """Đăng ký HẾT rồi mới đăng nhập từng người.
+
+        Mỗi lần băm mật khẩu ~0,4 s và test dùng READ_TIMEOUT_SEC=2: nếu đăng ký xen giữa,
+        người đăng nhập đầu tiên ngồi chờ quá 2 s và bị server ngắt vì im lặng.
+        """
+        first = self.connect()  # đăng ký trên kết nối của người đầu (test chỉ cho MAX_CLIENTS=3)
+        for n in names:
+            self.assertIn(self.register(first, n)["code"], (201, 409))
+        self.assertEqual(self.send_login(first, names[0])["code"], 200)
+        return [first] + [self.login(n, register=False) for n in names[1:]]
+
+    def seed_room(self, room: str, *members: str) -> None:
+        """Tạo phòng thẳng trong file database của server (chưa có lệnh CREATE_ROOM của Khôi).
+
+        Các tài khoản phải được REGISTER trước (khoá ngoại). Server và test là hai tiến trình
+        cùng mở một file SQLite; SQLite tự khoá file nên an toàn.
+        """
+        storage.init_db(os.path.join(self.data_dir, "chat.db"))
+        storage.create_room(room, members[0])
+        for m in members[1:]:
+            storage.add_member(room, m)
+
+    def roommates_online(self) -> tuple[Client, Client]:
+        """kiet và huy chung phòng `lab`; kiet đăng nhập trước, huy sau. Trả (kiet, huy)."""
+        kiet = self.connect()
+        for n in ("kiet", "huy"):
+            self.register(kiet, n)
+        self.seed_room("lab", "kiet", "huy")
+        self.assertEqual(self.send_login(kiet, "kiet")["data"]["rooms"], ["lab"])
+        huy = self.login("huy", register=False)
+        return kiet, huy
+
+    def assertNoMessage(self, c: Client, wait: float = 0.5):
+        with self.assertRaises(TimeoutError):
+            c.recv_msg(timeout=wait)
+
+
+class ServerTest(ServerHarness):
+    """Test với cấu hình nhỏ: MAX_CLIENTS=3, READ_TIMEOUT_SEC=2, MAX_MESSAGE_BYTES=1024."""
 
     # --- dữ liệu lỗi -------------------------------------------------------
 
@@ -244,36 +313,6 @@ class ServerTest(unittest.TestCase):
 
     # --- REGISTER, LOGIN (Huy, bước 5) --------------------------------------
 
-    def request(self, c: Client, command: str, payload: dict) -> dict:
-        c.send(encode({"command": command, "payload": payload}))
-        return c.recv_msg()
-
-    def register(self, c: Client, name: str, password: str = PASSWORD) -> dict:
-        return self.request(c, "REGISTER", {"username": name, "password": password})
-
-    def send_login(self, c: Client, name: str, password: str = PASSWORD) -> dict:
-        return self.request(c, "LOGIN", {"username": name, "password": password})
-
-    def login(self, name: str, register: bool = True) -> Client:
-        """Kết nối mới, đăng ký (bỏ qua nếu đã có) rồi đăng nhập."""
-        c = self.connect()
-        if register:
-            self.assertIn(self.register(c, name)["code"], (201, 409))
-        msg = self.send_login(c, name)
-        self.assertEqual((msg["command"], msg["code"]), ("LOGIN_RESPONSE", 200), msg)
-        return c
-
-    def logins(self, *names: str) -> list[Client]:
-        """Đăng ký HẾT rồi mới đăng nhập từng người.
-
-        Mỗi lần băm mật khẩu ~0,4 s và test dùng READ_TIMEOUT_SEC=2: nếu đăng ký xen giữa,
-        người đăng nhập đầu tiên ngồi chờ quá 2 s và bị server ngắt vì im lặng.
-        """
-        first = self.connect()  # đăng ký trên kết nối của người đầu (test chỉ cho MAX_CLIENTS=3)
-        for n in names:
-            self.assertIn(self.register(first, n)["code"], (201, 409))
-        self.assertEqual(self.send_login(first, names[0])["code"], 200)
-        return [first] + [self.login(n, register=False) for n in names[1:]]
 
     def test_register_then_login(self):
         c = self.connect()
@@ -360,26 +399,6 @@ class ServerTest(unittest.TestCase):
 
     # --- online/offline (Huy, bước 8) ------------------------------------------
 
-    def seed_room(self, room: str, *members: str) -> None:
-        """Tạo phòng thẳng trong file database của server (chưa có lệnh CREATE_ROOM của Khôi).
-
-        Các tài khoản phải được REGISTER trước (khoá ngoại). Server và test là hai tiến trình
-        cùng mở một file SQLite; SQLite tự khoá file nên an toàn.
-        """
-        storage.init_db(os.path.join(self.data_dir, "chat.db"))
-        storage.create_room(room, members[0])
-        for m in members[1:]:
-            storage.add_member(room, m)
-
-    def roommates_online(self) -> tuple[Client, Client]:
-        """kiet và huy chung phòng `lab`; kiet đăng nhập trước, huy sau. Trả (kiet, huy)."""
-        kiet = self.connect()
-        for n in ("kiet", "huy"):
-            self.register(kiet, n)
-        self.seed_room("lab", "kiet", "huy")
-        self.assertEqual(self.send_login(kiet, "kiet")["data"]["rooms"], ["lab"])
-        huy = self.login("huy", register=False)
-        return kiet, huy
 
     def test_login_notifies_roommates(self):
         kiet, huy = self.roommates_online()
@@ -420,9 +439,6 @@ class ServerTest(unittest.TestCase):
 
     # --- tin nhắn (bước 7, dùng phòng giả "lab") ------------------------------
 
-    def assertNoMessage(self, c: Client, wait: float = 0.5):
-        with self.assertRaises(TimeoutError):
-            c.recv_msg(timeout=wait)
 
     def test_room_msg_requires_login(self):
         c = self.connect()
