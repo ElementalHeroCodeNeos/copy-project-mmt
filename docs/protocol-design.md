@@ -110,13 +110,21 @@ Bộ đệm vượt 64 KB mà chưa gặp \n -> server gửi ERROR mã 413 rồi
  
 ### 4.3. Phòng (Khôi)
  
-<!-- Các lệnh đã thống nhất trong proposal: LIST_ROOMS, CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM, ... -->
- 
 | Lệnh | Chiều | Trường dữ liệu | Phản hồi | Mô tả |
 |------|:-----:|----------------|----------|-------|
-| | | | | |
+| `LIST_ROOMS` | C → S | (rỗng) | `LIST_ROOMS_RESPONSE` 200 -> `rooms` | Mọi phòng, sắp theo tên; mỗi phòng `{name, members, joined}`: số thành viên (kể cả offline) và người gọi có trong phòng không |
+| `CREATE_ROOM` | C → S | `room` | `CREATE_ROOM_RESPONSE` 201 -> `room`/400/409 | Tạo phòng; người tạo tự động là thành viên. Tên sai quy tắc → 400; tên đã có → 409 |
+| `JOIN_ROOM` | C → S | `room` | `JOIN_ROOM_RESPONSE` 200 -> `room`, `members`/404/409 | Tham gia phòng; `members`: tên các thành viên theo thứ tự tham gia. Phòng không tồn tại → 404; đã là thành viên → 409 |
+| `LEAVE_ROOM` | C → S | `room` | `LEAVE_ROOM_RESPONSE` 200 -> `room`, `deleted`/403/404 | Rời phòng. `deleted: true`: phòng vừa tự xoá vì không còn ai. Không phải thành viên → 403; phòng không tồn tại → 404 |
+| `NOTIFY_JOIN` | S → C | `room`, `username` | — | Có người vào phòng; gửi tới thành viên đang online của phòng, trừ người vào |
+| `NOTIFY_LEAVE` | S → C | `room`, `username` | — | Có người rời phòng; gửi tới thành viên còn lại đang online |
+
+- Tên phòng: 3–20 ký tự `a-z`, `0-9`, `_`, `-`. Server **không** đổi chữ hoa thành chữ thường; tên sai quy tắc → 400.
+- Thành viên phòng lưu trong database: thoát app hay mất kết nối **không** làm mất thành viên; chỉ `LEAVE_ROOM` mới rời. Đăng nhập lại, `LOGIN_RESPONSE.rooms` cho biết các phòng đang tham gia.
+- Phòng không còn thành viên thì tự xoá. Không có chủ phòng, mật khẩu phòng, kick.
+- `NOTIFY_JOIN`/`NOTIFY_LEAVE` gửi **sau** response của người vào/rời.
  
-### 4.4. Danh sách online, thông báo vào/rời (Huy)
+### 4.4. Danh sách online, thông báo online/offline (Huy)
  
 | Lệnh | Chiều | Trường dữ liệu | Phản hồi | Mô tả |
 |------|:-----:|----------------|----------|-------|
@@ -128,7 +136,7 @@ Bộ đệm vượt 64 KB mà chưa gặp \n -> server gửi ERROR mã 413 rồi
 - "Bạn cùng phòng": thành viên **đang online** của bất kỳ phòng nào người đó tham gia, không tính chính người đó. Người không chung phòng không nhận `NOTIFY_ONLINE`/`NOTIFY_OFFLINE`.
 - `NOTIFY_ONLINE` gửi **sau** `LOGIN_RESPONSE` của người đăng nhập.
 - Nếu một người ngắt rồi đăng nhập lại rất nhanh, bạn cùng phòng có thể nhận `NOTIFY_ONLINE` trước `NOTIFY_OFFLINE` (hai luồng gửi song song); client muốn biết trạng thái chắc chắn thì gửi `LIST_ONLINE`.
-- Thông báo vào/rời phòng: Khôi (4.3).
+- Thông báo vào/rời phòng: `NOTIFY_JOIN`/`NOTIFY_LEAVE` (4.3).
  
 ---
  
@@ -303,7 +311,32 @@ sequenceDiagram
  
 ### 6.7 Phòng (Khôi)
  
-*(Tạo/tham gia/rời phòng, phòng trống tự xoá.)*
+```mermaid
+sequenceDiagram
+    autonumber
+    actor K as khoi
+    participant S as Server
+    actor H as huy
+    K->>S: CREATE_ROOM {"room": "lab"}
+    alt tên sai quy tắc / đã có
+        S-->>K: CREATE_ROOM_RESPONSE 400 / 409
+    else hợp lệ
+        S-->>K: CREATE_ROOM_RESPONSE 201 {"room": "lab"}
+    end
+    H->>S: JOIN_ROOM {"room": "lab"}
+    alt phòng không tồn tại
+        S-->>H: JOIN_ROOM_RESPONSE 404
+    else
+        S-->>H: JOIN_ROOM_RESPONSE 200 {"room": "lab", "members": ["khoi", "huy"]}
+        S->>K: NOTIFY_JOIN {"room": "lab", "username": "huy"}
+    end
+    K->>S: LEAVE_ROOM {"room": "lab"}
+    S-->>K: LEAVE_ROOM_RESPONSE 200 {"room": "lab", "deleted": false}
+    S->>H: NOTIFY_LEAVE {"room": "lab", "username": "khoi"}
+    H->>S: LEAVE_ROOM {"room": "lab"}
+    S-->>H: LEAVE_ROOM_RESPONSE 200 {"room": "lab", "deleted": true}
+    Note over S: Người cuối rời: phòng tự xoá. "Rời, kiểm tra trống, xoá" và "kiểm tra tồn tại, tham gia" cùng nằm trong khoá phòng
+```
  
 ### 6.8 Danh sách online, thông báo (Huy)
  
