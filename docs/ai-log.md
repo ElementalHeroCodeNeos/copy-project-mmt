@@ -36,6 +36,11 @@
 # Log của Hà Anh Khôi
  
 # Log của Đỗ Đăng Huy
+| # | Date | Member | Tool / model | Task — what you asked | What AI produced | What you kept, changed or rejected — and how you verified it | Files |
+|:-:|------|--------|--------------|-----------------------|------------------|---------------------------------------------------------------|-------|
+| 1 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 2: chốt giao diện storage.py cùng Khôi (bảng users, rooms, room_members) | 11 điểm cần chốt kèm phương án và đánh đổi; storage.py chỉ có giao diện (11 hàm, docstring, lược đồ 3 bảng) | Bỏ delete_room và remove_member vì không có chỗ nào gọi.Chạy lệnh kiểm tra | server/src/storage.py |
+
+
  
 ---
  
