@@ -45,11 +45,26 @@ class Client:
         self.sock = socket.create_connection(("127.0.0.1", port), timeout=5)
         self.buffer = FrameBuffer(1 << 20)
         self.pending: list[bytes] = []
+        self.stash: list[dict] = []  # push nhận được trong lúc chờ response (xem recv_response)
 
     def send(self, data: bytes) -> None:
         self.sock.sendall(data)
 
     def recv_msg(self, timeout: float = 3) -> dict:
+        if self.stash:
+            return self.stash.pop(0)
+        return self._recv(timeout)
+
+    def recv_response(self, timeout: float = 3) -> dict:
+        """Đọc tới response hoặc ERROR; push (NOTIFY_*) đến trước được giữ lại cho recv_msg()."""
+        deadline = time.monotonic() + timeout
+        while True:
+            msg = self._recv(max(deadline - time.monotonic(), 0.01))
+            if not msg["command"].startswith("NOTIFY_"):
+                return msg
+            self.stash.append(msg)
+
+    def _recv(self, timeout: float) -> dict:
         deadline = time.monotonic() + timeout
         while not self.pending:
             self.sock.settimeout(max(deadline - time.monotonic(), 0.01))
@@ -128,7 +143,7 @@ class ServerHarness(unittest.TestCase):
 
     def request(self, c: Client, command: str, payload: dict, timeout: float = 3) -> dict:
         c.send(encode({"command": command, "payload": payload}))
-        return c.recv_msg(timeout)
+        return c.recv_response(timeout)
 
     def register(self, c: Client, name: str, password: str = PASSWORD, timeout: float = 3) -> dict:
         return self.request(c, "REGISTER", {"username": name, "password": password}, timeout)
@@ -454,6 +469,17 @@ class ServerTest(ServerHarness):
                          {"room": "lab", "deleted": True})  # người cuối rời: phòng tự xoá
         self.assertEqual(self.request(a, "LIST_ROOMS", {})["data"], {"rooms": []})
 
+    def test_join_and_leave_notify_others(self):
+        a, b = self.logins("khoi", "huy")
+        self.request(a, "CREATE_ROOM", {"room": "lab"})
+        self.request(b, "JOIN_ROOM", {"room": "lab"})
+        self.assertEqual(a.recv_msg(), {"command": "NOTIFY_JOIN",
+                                        "data": {"room": "lab", "username": "huy"}})
+        self.request(b, "LEAVE_ROOM", {"room": "lab"})
+        self.assertEqual(a.recv_msg(), {"command": "NOTIFY_LEAVE",
+                                        "data": {"room": "lab", "username": "huy"}})
+        self.assertNoMessage(b)  # người vào/rời không nhận thông báo của chính mình
+
     def test_room_errors(self):
         a, b = self.logins("khoi", "huy")
         self.assertEqual(self.request(a, "CREATE_ROOM", {"room": "Lab!"})["code"], 400)
@@ -477,10 +503,14 @@ class ServerTest(ServerHarness):
         self.assertEqual(self.send_login(a, "khoi")["data"]["rooms"], ["lab"])
 
     def join_lab(self, owner: Client, *others: Client) -> None:
-        """owner tạo phòng lab, những người còn lại tham gia."""
+        """owner tạo phòng lab, những người còn lại tham gia; đọc bỏ các NOTIFY_JOIN sinh ra."""
         self.assertEqual(self.request(owner, "CREATE_ROOM", {"room": "lab"})["code"], 201)
         for c in others:
             self.assertEqual(self.request(c, "JOIN_ROOM", {"room": "lab"})["code"], 200)
+        everyone = [owner, *others]
+        for i, c in enumerate(everyone):  # người thứ i được báo về những người vào sau mình
+            for _ in range(len(everyone) - 1 - i):
+                self.assertEqual(c.recv_msg()["command"], "NOTIFY_JOIN")
 
     # --- tin nhắn (Kiệt, bước 7; phòng thật từ bước 16) -----------------------
 

@@ -1,11 +1,15 @@
 """Lệnh phòng (Khôi): LIST_ROOMS, CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM (protocol-design 4.3).
 
+Thông báo vào/rời phòng (NOTIFY_JOIN, NOTIFY_LEAVE) gửi tới thành viên đang online của phòng đó,
+trừ chính người vào/rời.
+
 Luật phòng và khoá phòng nằm trong rooms.py; file này chỉ lấy tham số và trả response.
 """
 
 import rooms
 import storage
 from dispatch import Reply, command, require
+from session import broadcast
 from shared import protocol
 
 
@@ -34,8 +38,13 @@ def create_room(session, payload):
 def join_room(session, payload):
     """Tham gia phòng. 200 `{room, members}`; không tồn tại 404; đã ở trong phòng 409."""
     room = require(payload, "room", str)
-    members = rooms.join(room, session.username)
-    return Reply(data={"room": room, "members": members})
+    me = session.username
+    members = rooms.join(room, me)  # danh sách chép trong khoá phòng
+    # Báo cho các thành viên khác SAU response và NGOÀI khoá phòng (gửi có thể chờ tới 5 s).
+    others = [m for m in members if m != me]
+    notify = protocol.push(protocol.NOTIFY_JOIN, {"room": room, "username": me})
+    return Reply(data={"room": room, "members": members},
+                 after=[lambda: broadcast(others, notify)])
 
 
 @command(protocol.LEAVE_ROOM)
@@ -46,5 +55,9 @@ def leave_room(session, payload):
     app hay mất kết nối thì vẫn còn trong phòng.
     """
     room = require(payload, "room", str)
-    deleted, _remaining = rooms.leave(room, session.username)
-    return Reply(data={"room": room, "deleted": deleted})
+    me = session.username
+    deleted, remaining = rooms.leave(room, me)
+    notify = protocol.push(protocol.NOTIFY_LEAVE, {"room": room, "username": me})
+    # Phòng bị xoá thì remaining rỗng: không ai để báo.
+    return Reply(data={"room": room, "deleted": deleted},
+                 after=[lambda: broadcast(remaining, notify)])
