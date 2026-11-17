@@ -6,11 +6,8 @@ bản thật xong thì đổi dòng import ở nơi dùng và xoá hàm tương 
 | Hàm ở đây                         | Bản thật           | Nơi đang import             |
 |-----------------------------------|--------------------|-----------------------------|
 | cleanup                           | Huy                | server.py                   |
-| get_user                          | storage.py (Huy)   | handlers/messages.py        |
 | room_exists, is_member,           | rooms.py (Khôi)    | handlers/messages.py        |
 | members_of, lock                  |                    | (`import stubs as rooms`)   |
-
-LOGIN giả nằm ở handlers/stub_cmds.py.
 """
 
 import threading
@@ -32,17 +29,6 @@ def cleanup(session: Session) -> None:
     if session.username is not None:
         registry.unbind(session.username, session)
     session.close()
-
-
-# ---------------------------------------------------------------------------
-# storage.get_user (Huy, kiet-context 10.5)
-# ---------------------------------------------------------------------------
-
-
-def get_user(username: str) -> dict | None:
-    """Giả: username nào cũng "tồn tại" (chưa có SQLite). Người offline vẫn bị 404
-    nhờ handler kiểm tra registry sau đó."""
-    return {"username": username, "pw_hash": "", "salt": ""}
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "server" / "src"))
 
-import handlers  # noqa: E402,F401  (đăng ký ROOM_MSG, PRIVATE_MSG, LOGIN giả, PING)
+import handlers  # noqa: E402,F401  (đăng ký ROOM_MSG, PRIVATE_MSG, LOGIN, PING)
 from handlers import messages  # noqa: E402
 from dispatch import dispatch  # noqa: E402
 from session import registry  # noqa: E402
@@ -87,7 +87,8 @@ class PrivateMsgTest(unittest.TestCase):
         target = FakeSession(send_ok=False)
         registry.bind("huy_test", target)
         s = FakeSession(username="kiet")
-        dispatch(s, {"command": "PRIVATE_MSG", "payload": {"to": "huy_test", "content": "hi"}})
+        with mock.patch.object(messages, "get_user", return_value={"username": "huy_test"}):
+            dispatch(s, {"command": "PRIVATE_MSG", "payload": {"to": "huy_test", "content": "hi"}})
         self.assertEqual(len(target.sent), 1)       # đã thử gửi cho người nhận
         self.assertEqual(s.sent[0]["code"], 404)
 

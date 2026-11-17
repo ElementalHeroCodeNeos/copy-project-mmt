@@ -9,7 +9,6 @@ Tên file kết thúc bằng _cmds khi trùng tên với module dữ liệu ở 
 
 from handlers import auth_cmds  # noqa: F401  Huy: REGISTER, LOGIN, PING, QUIT, LIST_ONLINE, ...
 from handlers import messages   # noqa: F401  Kiệt: ROOM_MSG, PRIVATE_MSG
-from handlers import stub_cmds  # noqa: F401  TẠM: LOGIN giả. Xoá dòng này khi Huy có LOGIN thật
 
 # Bỏ dấu # khi file tương ứng đã có:
 # from handlers import room_cmds    # Khôi: LIST_ROOMS, CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM

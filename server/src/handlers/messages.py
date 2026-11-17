@@ -10,7 +10,7 @@ import stubs as rooms        # TẠM: đổi thành `import rooms` khi Khôi xon
 from dispatch import CommandError, Reply, command, require
 from session import broadcast, registry
 from shared import protocol
-from stubs import get_user   # TẠM: đổi thành `from storage import get_user` khi Huy xong
+from storage import get_user
 
 _NOT_REACHABLE = "Người nhận không tồn tại hoặc đang offline"
 

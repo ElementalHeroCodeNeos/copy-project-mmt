@@ -26,6 +26,7 @@ MAX_CLIENTS = 3
 READ_TIMEOUT = 2
 MAX_BYTES = 1024
 MAX_TEXT = 50
+PASSWORD = "matkhau123"
 TS_FORMAT = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
 
 
@@ -238,14 +239,99 @@ class ServerTest(unittest.TestCase):
         other.send(encode({"command": "KHONG_CO_LENH", "requestId": "ok", "payload": {}}))
         self.assertEqual(other.recv_msg()["requestId"], "ok")
 
-    # --- tin nhắn (bước 7, dùng LOGIN giả và phòng giả "lab") -------------
+    # --- REGISTER, LOGIN (Huy, bước 5) --------------------------------------
 
-    def login(self, name: str) -> Client:
+    def request(self, c: Client, command: str, payload: dict) -> dict:
+        c.send(encode({"command": command, "payload": payload}))
+        return c.recv_msg()
+
+    def register(self, c: Client, name: str, password: str = PASSWORD) -> dict:
+        return self.request(c, "REGISTER", {"username": name, "password": password})
+
+    def send_login(self, c: Client, name: str, password: str = PASSWORD) -> dict:
+        return self.request(c, "LOGIN", {"username": name, "password": password})
+
+    def login(self, name: str, register: bool = True) -> Client:
+        """Kết nối mới, đăng ký (bỏ qua nếu đã có) rồi đăng nhập."""
         c = self.connect()
-        c.send(encode({"command": "LOGIN", "payload": {"username": name}}))
-        msg = c.recv_msg()
+        if register:
+            self.assertIn(self.register(c, name)["code"], (201, 409))
+        msg = self.send_login(c, name)
         self.assertEqual((msg["command"], msg["code"]), ("LOGIN_RESPONSE", 200), msg)
         return c
+
+    def logins(self, *names: str) -> list[Client]:
+        """Đăng ký HẾT rồi mới đăng nhập từng người.
+
+        Mỗi lần băm mật khẩu ~0,4 s và test dùng READ_TIMEOUT_SEC=2: nếu đăng ký xen giữa,
+        người đăng nhập đầu tiên ngồi chờ quá 2 s và bị server ngắt vì im lặng.
+        """
+        first = self.connect()  # đăng ký trên kết nối của người đầu (test chỉ cho MAX_CLIENTS=3)
+        for n in names:
+            self.assertIn(self.register(first, n)["code"], (201, 409))
+        self.assertEqual(self.send_login(first, names[0])["code"], 200)
+        return [first] + [self.login(n, register=False) for n in names[1:]]
+
+    def test_register_then_login(self):
+        c = self.connect()
+        msg = self.register(c, "huy")
+        self.assertEqual((msg["command"], msg["code"], msg["data"]),
+                         ("REGISTER_RESPONSE", 201, {"username": "huy"}))
+        msg = self.send_login(c, "huy")
+        self.assertEqual((msg["code"], msg["data"]), (200, {"username": "huy", "rooms": []}))
+
+    def test_register_does_not_log_in(self):
+        c = self.connect()
+        self.register(c, "huy")
+        c.send(encode({"command": "ROOM_MSG", "payload": {"room": "lab", "content": "hi"}}))
+        self.assertEqual(c.recv_msg()["code"], 401)
+
+    def test_register_duplicate_is_409(self):
+        c = self.connect()
+        self.assertEqual(self.register(c, "huy")["code"], 201)
+        self.assertEqual(self.register(c, "huy", "matkhau_khac")["code"], 409)
+        self.assertEqual(self.register(c, "HUY")["code"], 409)  # chữ hoa = cùng tài khoản
+
+    def test_register_uppercase_is_lowercased(self):
+        c = self.connect()
+        self.assertEqual(self.register(c, "Huy_01")["data"], {"username": "huy_01"})
+        self.assertEqual(self.send_login(c, "HUY_01")["code"], 200)
+
+    def test_register_invalid_input_is_400(self):
+        c = self.connect()
+        cases = [("ab", PASSWORD), ("a" * 21, PASSWORD), ("huy!", PASSWORD), (" huy", PASSWORD),
+                 ("đăng", PASSWORD), ("huy", "12345"), ("huy", "x" * 129)]
+        for name, password in cases:
+            self.assertEqual(self.register(c, name, password)["code"], 400, (name, password))
+        self.assertEqual(self.request(c, "REGISTER", {"username": "huy"})["code"], 400)
+        self.assertEqual(self.request(c, "REGISTER", {"username": 1, "password": PASSWORD})["code"],
+                         400)
+
+    def test_login_wrong_password_and_unknown_user_same_401(self):
+        c = self.connect()
+        self.register(c, "huy")
+        wrong = self.send_login(c, "huy", "sai_mat_khau")
+        unknown = self.send_login(c, "khong_co")
+        self.assertEqual((wrong["code"], unknown["code"]), (401, 401))
+        self.assertEqual(wrong["message"], unknown["message"])
+
+    def test_login_twice_on_same_connection_is_409(self):
+        c = self.login("huy")
+        msg = self.send_login(c, "huy")
+        self.assertEqual((msg["code"], msg["message"]), (409, "Kết nối này đã đăng nhập"))
+
+    def test_login_same_name_twice_is_409(self):
+        self.login("kiet")
+        msg = self.send_login(self.connect(), "kiet")
+        self.assertEqual((msg["code"], msg["message"]),
+                         (409, "Tài khoản đang online ở kết nối khác"))
+
+    def test_login_wrong_password_while_online_is_401_not_409(self):
+        """Không biết mật khẩu thì không dò được ai đang online."""
+        self.login("kiet")
+        self.assertEqual(self.send_login(self.connect(), "kiet", "sai_mat_khau")["code"], 401)
+
+    # --- tin nhắn (bước 7, dùng phòng giả "lab") ------------------------------
 
     def assertNoMessage(self, c: Client, wait: float = 0.5):
         with self.assertRaises(TimeoutError):
@@ -256,14 +342,8 @@ class ServerTest(unittest.TestCase):
         c.send(encode({"command": "ROOM_MSG", "payload": {"room": "lab", "content": "hi"}}))
         self.assertEqual(c.recv_msg()["code"], 401)
 
-    def test_login_same_name_twice_is_409(self):
-        self.login("kiet")
-        c = self.connect()
-        c.send(encode({"command": "LOGIN", "payload": {"username": "kiet"}}))
-        self.assertEqual(c.recv_msg()["code"], 409)
-
     def test_room_msg_reaches_all_members_response_first(self):
-        a, b, c = self.login("kiet"), self.login("khoi"), self.login("huy")
+        a, b, c = self.logins("kiet", "khoi", "huy")
         a.send(encode({"command": "ROOM_MSG", "requestId": "r1",
                        "payload": {"room": "lab", "content": "Chào cả nhóm"}}))
         resp = a.recv_msg()  # người gửi nhận response TRƯỚC push
@@ -288,7 +368,7 @@ class ServerTest(unittest.TestCase):
         self.assertNoMessage(a)  # lỗi thì không có push nào
 
     def test_private_msg_only_to_recipient(self):
-        a, b, c = self.login("kiet"), self.login("huy"), self.login("khoi")
+        a, b, c = self.logins("kiet", "huy", "khoi")
         a.send(encode({"command": "PRIVATE_MSG", "payload": {"to": "huy", "content": "tối họp nhé"}}))
         resp = a.recv_msg()
         self.assertEqual(resp["code"], 200)
@@ -306,7 +386,7 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(a.recv_msg()["code"], 404)   # không online
 
     def test_dead_member_does_not_block_room(self):
-        a, b, c = self.login("kiet"), self.login("khoi"), self.login("huy")
+        a, b, c = self.logins("kiet", "khoi", "huy")
         b.sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
         b.close()  # khoi chết đột ngột (RST)
         time.sleep(0.3)
@@ -320,8 +400,7 @@ class ServerTest(unittest.TestCase):
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:  # chờ server dọn phiên cũ
             c = self.connect()
-            c.send(encode({"command": "LOGIN", "payload": {"username": "kiet"}}))
-            if c.recv_msg()["code"] == 200:
+            if self.send_login(c, "kiet")["code"] == 200:
                 return
             c.close()
             time.sleep(0.1)
