@@ -9,8 +9,10 @@ test nhanh: MAX_CLIENTS=3, READ_TIMEOUT_SEC=2, MAX_MESSAGE_BYTES=1024.
 import os
 import socket
 import struct
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -75,11 +77,13 @@ class Client:
 class ServerTest(unittest.TestCase):
     def setUp(self):
         self.port = _free_port()
+        # Mỗi test một database rỗng trong thư mục tạm, không đụng /app/data (Huy, bước 4).
+        self.data_dir = tempfile.mkdtemp(prefix="chat-test-")
         env = dict(os.environ,
                    SERVER_HOST="127.0.0.1", SERVER_PORT=str(self.port),
                    MAX_CLIENTS=str(MAX_CLIENTS), READ_TIMEOUT_SEC=str(READ_TIMEOUT),
                    MAX_MESSAGE_BYTES=str(MAX_BYTES), MAX_TEXT_CHARS=str(MAX_TEXT),
-                   LOG_LEVEL="INFO",
+                   LOG_LEVEL="INFO", DATA_DIR=self.data_dir,
                    PYTHONPATH=str(ROOT), PYTHONIOENCODING="utf-8")
         self.proc = subprocess.Popen([sys.executable, "-u", str(SERVER)], env=env,
                                      stderr=subprocess.PIPE, text=True, encoding="utf-8")
@@ -102,6 +106,7 @@ class ServerTest(unittest.TestCase):
         self.proc.kill()
         self.proc.wait()
         self.proc.stderr.close()
+        shutil.rmtree(self.data_dir, ignore_errors=True)
 
     def connect(self) -> Client:
         c = Client(self.port)

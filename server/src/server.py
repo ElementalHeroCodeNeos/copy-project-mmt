@@ -23,6 +23,7 @@ from shared.protocol import FrameBuffer, FrameTooLarge, ProtocolError
 import handlers  # noqa: F401  (import để các file handler đăng ký lệnh bằng @command)
 from dispatch import dispatch
 from session import Session
+import storage
 from stubs import cleanup  # TẠM: thay bằng cleanup() thật của Huy
 
 log = logging.getLogger("server")
@@ -199,8 +200,9 @@ def main() -> None:
         format="%(asctime)s %(levelname)s [%(threadName)s] %(name)s: %(message)s",
     )
     signal.signal(signal.SIGTERM, _handle_sigterm)
+    storage.init_db()  # Huy: tạo database rỗng nếu chưa có; lỗi thì dừng trước khi nhận client
 
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener =socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # Cho phép bind lại cổng ngay sau khi server khởi động lại.
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind((config.SERVER_HOST, config.SERVER_PORT))
