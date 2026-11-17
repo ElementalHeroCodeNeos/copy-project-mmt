@@ -87,10 +87,12 @@ Bộ đệm vượt 64 KB mà chưa gặp \n -> server gửi ERROR mã 413 rồi
 ## 4. Command Reference
 ### 4.1. Kết nối và phiên (Huy; ERROR: Kiệt)
  
-<!-- Huy viết: REGISTER, LOGIN, PING (server trả PING_RESPONSE, không có PONG), QUIT -->
- 
 | Lệnh | Chiều | Trường dữ liệu | Phản hồi | Mô tả |
 |------|:-----:|----------------|----------|-------|
+| `REGISTER` | C → S | `username`, `password` | `REGISTER_RESPONSE` 201 -> `username`/400/409 | Tạo tài khoản. Username đổi về chữ thường rồi mới kiểm tra quy tắc (7); `data.username` là tên đã lưu. Trùng username → 409. Đăng ký xong **không** tự đăng nhập |
+| `LOGIN` | C → S | `username`, `password` | `LOGIN_RESPONSE` 200 -> `username`, `rooms`/401/409 | Đăng nhập. `rooms`: các phòng đang tham gia (thành viên phòng giữ lại qua các lần đăng nhập). Sai username hoặc mật khẩu → 401, cùng một câu. Kết nối này đã đăng nhập → 409 "Kết nối này đã đăng nhập"; tài khoản đang online ở kết nối khác → 409 "Tài khoản đang online ở kết nối khác". Thành công thì bạn cùng phòng nhận `NOTIFY_ONLINE` (4.4) |
+| `PING` | C → S | (rỗng) | `PING_RESPONSE` 200 | Nhịp tim, client gửi mỗi 30 s (8.5); không cần đăng nhập |
+| `QUIT` | C → S | (rỗng) | `QUIT_RESPONSE` 200 | Thoát; không cần đăng nhập. Server gửi response rồi đóng kết nối và dọn phiên như khi ngắt đột ngột (bạn cùng phòng nhận `NOTIFY_OFFLINE`). Các message gửi sau `QUIT` bị bỏ qua |
 | `ERROR` | S → C | `code`, `message` | — | Báo lỗi message không xác định được lệnh, message vượt quá 64 KB, hoặc server đã đủ số client tối đa |
  
 ### 4.2. Tin nhắn (Kiệt)
@@ -118,7 +120,15 @@ Bộ đệm vượt 64 KB mà chưa gặp \n -> server gửi ERROR mã 413 rồi
  
 | Lệnh | Chiều | Trường dữ liệu | Phản hồi | Mô tả |
 |------|:-----:|----------------|----------|-------|
-| | | | | |
+| `LIST_ONLINE` | C → S | (rỗng) | `LIST_ONLINE_RESPONSE` 200 -> `users` | Mọi người đang online trên server, sắp theo tên, kể cả chính mình |
+| `LIST_MEMBERS` | C → S | `room` | `LIST_MEMBERS_RESPONSE` 200 -> `room`, `members`/403/404 | Thành viên phòng theo thứ tự tham gia, mỗi người `{username, online}` (kể cả thành viên offline). Không phải thành viên → 403; phòng không tồn tại → 404 |
+| `NOTIFY_ONLINE` | S → C | `username` | — | Bạn cùng phòng vừa đăng nhập |
+| `NOTIFY_OFFLINE` | S → C | `username` | — | Bạn cùng phòng vừa ngắt kết nối (QUIT, mất mạng, bị kill, im lặng quá 90 s) |
+
+- "Bạn cùng phòng": thành viên **đang online** của bất kỳ phòng nào người đó tham gia, không tính chính người đó. Người không chung phòng không nhận `NOTIFY_ONLINE`/`NOTIFY_OFFLINE`.
+- `NOTIFY_ONLINE` gửi **sau** `LOGIN_RESPONSE` của người đăng nhập.
+- Nếu một người ngắt rồi đăng nhập lại rất nhanh, bạn cùng phòng có thể nhận `NOTIFY_ONLINE` trước `NOTIFY_OFFLINE` (hai luồng gửi song song); client muốn biết trạng thái chắc chắn thì gửi `LIST_ONLINE`.
+- Thông báo vào/rời phòng: Khôi (4.3).
  
 ---
  
@@ -159,15 +169,71 @@ Lý do: lỗi 400 vẫn xác định được ranh giới message nên đọc ti
 ## 6. Sequence Diagrams
 ### 6.1 Đăng ký và đăng nhập (Huy)
  
-*(REGISTER, LOGIN thành công và thất bại.)*
+```mermaid
+sequenceDiagram
+    autonumber
+    actor H as huy
+    participant S as Server
+    actor K as kiet (online, chung phòng lab)
+    H->>S: REGISTER {"username": "Huy", "password": "matkhau123"}
+    alt sai quy tắc (username, độ dài mật khẩu)
+        S-->>H: REGISTER_RESPONSE 400
+    else username đã có
+        S-->>H: REGISTER_RESPONSE 409
+    else hợp lệ
+        S-->>H: REGISTER_RESPONSE 201 {"username": "huy"}
+    end
+    Note over H,S: Đăng ký xong chưa đăng nhập
+    H->>S: LOGIN {"username": "huy", "password": "matkhau123"}
+    alt không có tài khoản hoặc sai mật khẩu
+        S-->>H: LOGIN_RESPONSE 401 "Sai tên đăng nhập hoặc mật khẩu"
+    else đúng
+        S-->>H: LOGIN_RESPONSE 200 {"username": "huy", "rooms": ["lab"]}
+        S->>K: NOTIFY_ONLINE {"username": "huy"}
+    end
+```
  
 ### 6.2 Đăng nhập khi tài khoản đang online ở kết nối khác (Huy)
  
-*(LOGIN khi tài khoản đang online ở kết nối khác.)*
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as huy (máy 1, đang online)
+    participant S as Server
+    actor B as huy (máy 2)
+    B->>S: LOGIN {"username": "huy", "password": "..."}
+    alt sai mật khẩu
+        S-->>B: LOGIN_RESPONSE 401
+        Note over S: Kiểm tra mật khẩu trước, nên người không biết mật khẩu không dò được ai đang online
+    else đúng mật khẩu
+        S-->>B: LOGIN_RESPONSE 409 "Tài khoản đang online ở kết nối khác"
+        Note over A,S: Phiên trên máy 1 giữ nguyên
+    end
+    Note over A: Máy 1 bị treo: server đóng phiên sau tối đa 90 s im lặng, rồi máy 2 mới đăng nhập được
+```
  
 ### 6.3 Nhịp tim, timeout và QUIT (Huy)
  
-*(PING → PING_RESPONSE định kỳ, timeout đọc ở server, QUIT.)*
+```mermaid
+sequenceDiagram
+    autonumber
+    actor H as huy
+    participant S as Server
+    actor K as kiet (chung phòng)
+    loop mỗi 30 s
+        H->>S: PING {}
+        S-->>H: PING_RESPONSE 200
+        Note over S: Dời hạn chót đọc thêm 90 s
+    end
+    alt huy thoát
+        H->>S: QUIT {}
+        S-->>H: QUIT_RESPONSE 200
+        S->>S: đóng kết nối, dọn phiên
+    else huy im lặng quá 90 s (treo, mất mạng mà không có FIN/RST)
+        S->>S: hết hạn chót đọc: đóng kết nối, dọn phiên
+    end
+    S->>K: NOTIFY_OFFLINE {"username": "huy"}
+```
  
 ### 6.4 Gửi tin vào phòng
  
@@ -241,7 +307,27 @@ sequenceDiagram
  
 ### 6.8 Danh sách online, thông báo (Huy)
  
-*(Danh sách online, thông báo vào/rời và online/offline.)*
+```mermaid
+sequenceDiagram
+    autonumber
+    actor H as huy
+    participant S as Server
+    actor K as kiet (chung phòng lab)
+    actor N as nam (không chung phòng)
+    H->>S: LIST_ONLINE {}
+    S-->>H: LIST_ONLINE_RESPONSE 200 {"users": ["huy", "kiet", "nam"]}
+    H->>S: LIST_MEMBERS {"room": "lab"}
+    alt phòng không tồn tại
+        S-->>H: LIST_MEMBERS_RESPONSE 404
+    else huy không phải thành viên
+        S-->>H: LIST_MEMBERS_RESPONSE 403
+    else là thành viên
+        S-->>H: LIST_MEMBERS_RESPONSE 200 {"room": "lab", "members": [{"username": "huy", "online": true}, {"username": "kiet", "online": true}]}
+    end
+    Note over H: huy mất kết nối
+    S->>K: NOTIFY_OFFLINE {"username": "huy"}
+    Note over N: nam không nhận (không chung phòng)
+```
  
 ---
  

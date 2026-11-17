@@ -45,6 +45,7 @@
 | 5 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 6: QUIT | Handler QUIT (Reply(close=True), không cần đăng nhập); 3 test (đóng sau response, đăng nhập lại được ngay, bỏ qua message sau QUIT) |  | server/src/handlers/auth_cmds.py, tests/test_server.py |
 | 6 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 8: cleanup thật, báo online/offline | presence.py (cleanup, roommates, NOTIFY_ONLINE/NOTIFY_OFFLINE tới bạn cùng phòng đang online); LOGIN báo online trong after; gỡ cleanup giả; 6 unit test + 4 test với server thật |  | server/src/presence.py, server/src/handlers/auth_cmds.py, server/src/server.py, server/src/stubs.py, shared/protocol.py, tests/test_presence.py, tests/test_server.py |
 | 7 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 9: LIST_ONLINE, danh sách thành viên phòng | LIST_ONLINE ({users} sắp theo tên); LIST_MEMBERS ({room, members:[{username, online}]}, 404/403, đọc database một lần); 4 unit test + 1 test với server thật |  | server/src/handlers/auth_cmds.py, shared/protocol.py, tests/test_presence.py, tests/test_server.py |
+| 8 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 10: docs protocol mục 4.1, 4.4, sơ đồ 6.1–6.3, 6.8 | Bảng lệnh REGISTER, LOGIN, PING, QUIT, LIST_ONLINE, LIST_MEMBERS, NOTIFY_ONLINE/OFFLINE; 4 sơ đồ Mermaid; đối chiếu với code bước 5–9 |  | docs/protocol-design.md |
  
 ---
  
