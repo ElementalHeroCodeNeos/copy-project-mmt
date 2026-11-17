@@ -42,9 +42,7 @@
 | 2 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 3: băm và kiểm tra mật khẩu | auth.py (pbkdf2_hmac sha256 600.000 vòng, salt 16 byte, chuẩn hoá NFC, compare_digest); 8 unit test; 7 điểm cần chốt kèm đánh đổi | | server/src/auth.py, tests/test_auth.py |
 | 3 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 4: cài đặt SQLite (users, rooms, room_members) | storage.py: một kết nối chung + khoá, giao dịch với `with conn`, INSERT OR IGNORE; init_db() trong server.py; DATA_DIR tạm cho test server; 17 unit test (có test 20 luồng đăng ký trùng); 6 điểm cần chốt kèm đánh đổi | Chọn các phương án: một kết nối SQLite chung, kèm một khoá; giao dịch với with conn:; dùng INSERT OR IGNORE để phân biệt trùng khoá với lỗi khoá ngoại; gọi init_db() ở đầu main(); mỗi test server dùng một database tạm riêng; | server/src/storage.py, server/src/server.py, tests/test_server.py, tests/test_storage.py |
 | 4 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 5: REGISTER, LOGIN thật | REGISTER (đổi chữ thường, kiểm tra quy tắc, 201/400/409), LOGIN (409 → 401 → bind, trả {username, rooms}); gỡ LOGIN giả và get_user giả; 9 test mới, sửa test cũ cho hợp băm thật; 7 điểm cần chốt kèm đánh đổi | Chọn các phương án đề xuất | server/src/handlers/, server/src/stubs.py, tests/test_server.py, tests/test_messages.py |
-
-
-
+| 5 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 6: QUIT | Handler QUIT (Reply(close=True), không cần đăng nhập); 3 test (đóng sau response, đăng nhập lại được ngay, bỏ qua message sau QUIT) |  | server/src/handlers/auth_cmds.py, tests/test_server.py |
  
 ---
  

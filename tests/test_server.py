@@ -331,6 +331,30 @@ class ServerTest(unittest.TestCase):
         self.login("kiet")
         self.assertEqual(self.send_login(self.connect(), "kiet", "sai_mat_khau")["code"], 401)
 
+    # --- QUIT (Huy, bước 6) ----------------------------------------------------
+
+    def test_quit_gets_response_then_closed(self):
+        c = self.connect()  # chưa đăng nhập vẫn QUIT được
+        msg = self.request(c, "QUIT", {})
+        self.assertEqual((msg["command"], msg["code"]), ("QUIT_RESPONSE", 200))
+        self.assertTrue(c.wait_closed(2))
+
+    def test_quit_frees_username_immediately(self):
+        c = self.login("huy")
+        self.assertEqual(self.request(c, "QUIT", {})["code"], 200)
+        self.assertTrue(c.wait_closed(2))
+        c.close()
+        self.clients.remove(c)
+        self.login("huy", register=False)  # phiên cũ đã dọn: đăng nhập lại được ngay
+
+    def test_messages_after_quit_are_ignored(self):
+        c = self.connect()
+        c.send(encode({"command": "QUIT", "requestId": "q", "payload": {}})
+               + encode({"command": "PING", "requestId": "p", "payload": {}}))
+        self.assertEqual(c.recv_msg()["requestId"], "q")
+        with self.assertRaises((EOFError, ConnectionError)):  # đóng luôn, không có PING_RESPONSE
+            c.recv_msg(timeout=2)
+
     # --- tin nhắn (bước 7, dùng phòng giả "lab") ------------------------------
 
     def assertNoMessage(self, c: Client, wait: float = 0.5):

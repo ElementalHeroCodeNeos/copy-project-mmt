@@ -68,6 +68,18 @@ def login(session, payload):
     return Reply(data={"username": username, "rooms": storage.rooms_of_user(username)})
 
 
+@command(protocol.QUIT, auth=False)
+def quit_(session, payload):
+    """Thoát: trả QUIT_RESPONSE 200 rồi server đóng kết nối và gọi cleanup().
+
+    Không cần đăng nhập (chưa đăng nhập cũng thoát được). `close=True`: dispatcher gửi
+    response xong thì server.py thoát vòng đọc; các message gửi sau QUIT trong cùng một
+    lần nhận bị bỏ qua. Dọn phiên (gỡ khỏi danh sách online, báo offline) nằm ở cleanup(),
+    giống hệt khi client ngắt đột ngột, nên không viết hai lần.
+    """
+    return Reply(close=True)
+
+
 @command(protocol.PING, auth=False)
 def ping(session, payload):
     """Nhịp tim: client gửi PING mỗi PING_INTERVAL_SEC giây, server trả PING_RESPONSE 200.
