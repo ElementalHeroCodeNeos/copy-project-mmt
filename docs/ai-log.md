@@ -44,6 +44,7 @@
 | 4 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 5: REGISTER, LOGIN thật | REGISTER (đổi chữ thường, kiểm tra quy tắc, 201/400/409), LOGIN (409 → 401 → bind, trả {username, rooms}); gỡ LOGIN giả và get_user giả; 9 test mới, sửa test cũ cho hợp băm thật; 7 điểm cần chốt kèm đánh đổi | Chọn các phương án đề xuất | server/src/handlers/, server/src/stubs.py, tests/test_server.py, tests/test_messages.py |
 | 5 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 6: QUIT | Handler QUIT (Reply(close=True), không cần đăng nhập); 3 test (đóng sau response, đăng nhập lại được ngay, bỏ qua message sau QUIT) |  | server/src/handlers/auth_cmds.py, tests/test_server.py |
 | 6 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 8: cleanup thật, báo online/offline | presence.py (cleanup, roommates, NOTIFY_ONLINE/NOTIFY_OFFLINE tới bạn cùng phòng đang online); LOGIN báo online trong after; gỡ cleanup giả; 6 unit test + 4 test với server thật |  | server/src/presence.py, server/src/handlers/auth_cmds.py, server/src/server.py, server/src/stubs.py, shared/protocol.py, tests/test_presence.py, tests/test_server.py |
+| 7 | 2026-11-18 | Đỗ Đăng Huy | Claude | Bước 9: LIST_ONLINE, danh sách thành viên phòng | LIST_ONLINE ({users} sắp theo tên); LIST_MEMBERS ({room, members:[{username, online}]}, 404/403, đọc database một lần); 4 unit test + 1 test với server thật |  | server/src/handlers/auth_cmds.py, shared/protocol.py, tests/test_presence.py, tests/test_server.py |
  
 ---
  

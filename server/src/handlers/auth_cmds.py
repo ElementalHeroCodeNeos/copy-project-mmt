@@ -1,4 +1,4 @@
-"""Lệnh phiên (Huy): REGISTER, LOGIN, PING, QUIT, ...
+"""Lệnh phiên và trạng thái online (Huy): REGISTER, LOGIN, QUIT, LIST_ONLINE, LIST_MEMBERS, PING.
 
 PING: bản tối thiểu do Kiệt viết ở khung bước 6 để khung có một lệnh chạy từ đầu
 đến cuối; Huy có thể sửa khi làm phần heartbeat.
@@ -82,6 +82,33 @@ def quit_(session, payload):
     giống hệt khi client ngắt đột ngột, nên không viết hai lần.
     """
     return Reply(close=True)
+
+
+@command(protocol.LIST_ONLINE)
+def list_online(session, payload):
+    """Mọi người đang online trên server, sắp theo tên: `{users: [...]}` (kể cả chính mình)."""
+    return Reply(data={"users": sorted(registry.online_usernames())})
+
+
+@command(protocol.LIST_MEMBERS)
+def list_members(session, payload):
+    """Thành viên phòng theo thứ tự tham gia, kèm trạng thái online.
+
+    `{room, members: [{username, online}]}`; phòng không tồn tại → 404; không phải thành
+    viên → 403.
+
+    Chỉ đọc database MỘT lần: phòng trống luôn bị xoá ngay (create_room thêm người tạo và
+    leave_room xoá phòng trống, đều trong một giao dịch), nên "danh sách rỗng" nghĩa là
+    "phòng không tồn tại". Đọc một lần thì không có chuyện phòng bị xoá giữa hai lần đọc.
+    """
+    room = require(payload, "room", str)
+    members = storage.list_members(room)
+    if not members:
+        raise CommandError(protocol.NOT_FOUND, f"Phòng {room} không tồn tại")
+    if session.username not in members:
+        raise CommandError(protocol.FORBIDDEN, f"Bạn không phải thành viên phòng {room}")
+    return Reply(data={"room": room, "members": [
+        {"username": m, "online": registry.is_online(m)} for m in members]})
 
 
 @command(protocol.PING, auth=False)

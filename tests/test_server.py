@@ -406,6 +406,18 @@ class ServerTest(unittest.TestCase):
         stranger.close()
         self.assertNoMessage(kiet)
 
+    # --- LIST_ONLINE, LIST_MEMBERS (Huy, bước 9) --------------------------------
+
+    def test_list_online_and_members(self):
+        kiet, huy = self.roommates_online()
+        kiet.recv_msg()  # NOTIFY_ONLINE
+        msg = self.request(huy, "LIST_ONLINE", {})
+        self.assertEqual((msg["command"], msg["data"]),
+                         ("LIST_ONLINE_RESPONSE", {"users": ["huy", "kiet"]}))
+        msg = self.request(huy, "LIST_MEMBERS", {"room": "lab"})
+        self.assertEqual(msg["data"]["members"], [{"username": "kiet", "online": True},
+                                                  {"username": "huy", "online": True}])
+
     # --- tin nhắn (bước 7, dùng phòng giả "lab") ------------------------------
 
     def assertNoMessage(self, c: Client, wait: float = 0.5):
