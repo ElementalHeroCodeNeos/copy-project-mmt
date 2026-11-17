@@ -126,15 +126,15 @@ class ServerHarness(unittest.TestCase):
         self.clients.append(c)
         return c
 
-    def request(self, c: Client, command: str, payload: dict) -> dict:
+    def request(self, c: Client, command: str, payload: dict, timeout: float = 3) -> dict:
         c.send(encode({"command": command, "payload": payload}))
-        return c.recv_msg()
+        return c.recv_msg(timeout)
 
-    def register(self, c: Client, name: str, password: str = PASSWORD) -> dict:
-        return self.request(c, "REGISTER", {"username": name, "password": password})
+    def register(self, c: Client, name: str, password: str = PASSWORD, timeout: float = 3) -> dict:
+        return self.request(c, "REGISTER", {"username": name, "password": password}, timeout)
 
-    def send_login(self, c: Client, name: str, password: str = PASSWORD) -> dict:
-        return self.request(c, "LOGIN", {"username": name, "password": password})
+    def send_login(self, c: Client, name: str, password: str = PASSWORD, timeout: float = 3) -> dict:
+        return self.request(c, "LOGIN", {"username": name, "password": password}, timeout)
 
     def login(self, name: str, register: bool = True) -> Client:
         """Kết nối mới, đăng ký (bỏ qua nếu đã có) rồi đăng nhập."""

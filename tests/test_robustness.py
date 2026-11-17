@@ -52,8 +52,10 @@ class ManyClientsTest(ServerHarness):
                 c = Client(self.port)
                 with lock:
                     clients[name] = c
-                assert self.register(c, name)["code"] == 201
-                assert self.send_login(c, name)["code"] == 200
+                # 30 luồng cùng băm mật khẩu: trên máy bận, một client có thể chờ quá 3 s
+                # (thời gian chờ mặc định của test), nên cho chờ tới 30 s.
+                assert self.register(c, name, timeout=30)["code"] == 201
+                assert self.send_login(c, name, timeout=30)["code"] == 200
                 all_ready.wait(timeout=60)  # mọi người online rồi mới nhắn
                 c.send(encode({"command": "ROOM_MSG", "requestId": name,
                                "payload": {"room": "lab", "content": f"chào từ {name}"}}))

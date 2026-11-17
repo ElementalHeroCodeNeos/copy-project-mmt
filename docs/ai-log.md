@@ -35,6 +35,9 @@
 | 20 | 2026-11-18 | Đặng Tuấn Kiệt | Claude | Bước 13: architecture.md — mô hình đồng thời và khoá | Mục 1–4, 6: sơ đồ luồng server, so sánh mô hình kèm số đo thật, bảng 7 loại dữ liệu dùng chung và khoá, thứ tự khoá, đánh đổi thứ tự tin, vòng đời kết nối, 9 quyết định thiết kế; chừa dòng phòng (Khôi) và mục Deployment (Huy) |  | docs/architecture.md |
  
 # Log của Hà Anh Khôi
+| # | Date | Member | Tool / model | Task — what you asked | What AI produced | What you kept, changed or rejected — and how you verified it | Files |
+|:-:|------|--------|--------------|-----------------------|------------------|---------------------------------------------------------------|-------|
+| 1 | 2026-11-18 | Hà Anh Khôi | Claude | Bước 15: rooms.py (khoá phòng, luật phòng) | rooms.py: một khoá chung cho mọi phòng, quy tắc tên phòng, create/join/leave trong khoá phòng, giao diện cho ROOM_MSG; 7 unit test (có test hai luồng chen nhau khi phòng bị xoá); sửa test bấp bênh của bước 11. AI tự chọn phương án theo đề xuất (Khôi vắng) |  | server/src/rooms.py, tests/test_rooms.py, tests/test_server.py, tests/test_robustness.py |
  
 # Log của Đỗ Đăng Huy
 | # | Date | Member | Tool / model | Task — what you asked | What AI produced | What you kept, changed or rejected — and how you verified it | Files |
