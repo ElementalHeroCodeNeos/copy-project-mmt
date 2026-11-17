@@ -41,6 +41,7 @@
 | 2 | 2026-11-18 | Hà Anh Khôi | Claude | Bước 16: LIST_ROOMS, CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM | room_cmds.py (4 lệnh, payload/response và mã lỗi); gỡ phòng giả (messages.py dùng rooms.py thật, stubs.py chỉ còn docstring); 3 test lệnh phòng, sửa các test tin nhắn dùng phòng thật. AI tự chọn phương án theo đề xuất |  | server/src/handlers/, server/src/stubs.py, shared/protocol.py, tests/ |
 | 3 | 2026-11-18 | Hà Anh Khôi | Claude | Bước 17: thông báo vào/rời phòng | NOTIFY_JOIN/NOTIFY_LEAVE {room, username} tới thành viên online của phòng, gửi sau response và ngoài khoá phòng; recv_response() trong client test; 1 test mới. AI tự chọn phương án theo đề xuất |  | server/src/handlers/room_cmds.py, shared/protocol.py, tests/test_server.py |
 | 4 | 2026-11-18 | Hà Anh Khôi | Claude | Bước 18: docs protocol 4.3, 6.7, phần phòng trong architecture | Bảng lệnh phòng và push vào/rời, quy tắc phòng; sơ đồ 6.7; dòng phòng trong bảng dữ liệu dùng chung của architecture |  | docs/protocol-design.md, docs/architecture.md |
+| 5 | 2026-11-18 | Hà Anh Khôi | Claude | Bước 20: client Dockerfile và build context | client/Dockerfile (python:3.12-slim, COPY shared/), build context client về thư mục gốc trong docker-compose.yml, client.py tối thiểu (kết nối + PING); chạy thử trong Docker. AI tự chọn phương án theo đề xuất |  | client/Dockerfile, client/src/client.py, docker-compose.yml |
  
 # Log của Đỗ Đăng Huy
 | # | Date | Member | Tool / model | Task — what you asked | What AI produced | What you kept, changed or rejected — and how you verified it | Files |

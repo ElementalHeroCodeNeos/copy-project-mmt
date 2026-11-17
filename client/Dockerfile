@@ -1,26 +1,16 @@
-# ============================================================
-# Client Dockerfile — Network Programming Assignment
-# ============================================================
-# Replace this template with your actual build instructions.
-# ============================================================
+# Client image (Khôi): Python 3.12, thư viện chuẩn, không cần pip install.
+# Build context là thư mục gốc repo (xem docker-compose.yml) để COPY được shared/ (giống server).
+FROM python:3.12-slim
 
-FROM ubuntu:22.04
+# PYTHONPATH=/app: cho phép `from shared import protocol` (dùng chung FrameBuffer, encode, decode).
+# PYTHONDONTWRITEBYTECODE=1: không tạo file .pyc trong container.
+ENV PYTHONPATH=/app \
+    PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
-# TODO: Install dependencies for your chosen language
-# Java:   apt-get install -y default-jdk
-# Python: apt-get install -y python3
-# C:      apt-get install -y gcc
+COPY shared/ ./shared/
+COPY client/src/ ./src/
 
-COPY src/ ./src/
-
-# TODO: Build step (if needed)
-# Java:   javac src/*.java
-# C:      gcc -o client src/client.c
-
-# TODO: Run command
-# Java:   CMD ["java", "-cp", "src", "Client"]
-# Python: CMD ["python3", "src/client.py"]
-# C:      CMD ["./client"]
-CMD ["echo", "Replace this CMD with your client start command"]
+# -u: không đệm stdout, tin nhắn hiện ngay.
+CMD ["python", "-u", "src/client.py"]
