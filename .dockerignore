@@ -1,0 +1,9 @@
+# Những thứ không gửi vào Docker build context (build context của server là thư mục gốc repo).
+.git
+.env
+notes/
+docs/
+**/__pycache__
+**/*.pyc
+.vscode/
+.idea/
