@@ -21,6 +21,8 @@ from pathlib import Path
 from shared.protocol import FrameBuffer, decode, encode
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "server" / "src"))
+import storage  # noqa: E402  (tạo phòng sẵn trong database của server khi test)
 SERVER = ROOT / "server" / "src" / "server.py"
 MAX_CLIENTS = 3
 READ_TIMEOUT = 2
@@ -107,6 +109,7 @@ class ServerTest(unittest.TestCase):
         self.proc.kill()
         self.proc.wait()
         self.proc.stderr.close()
+        storage.init_db(":memory:")  # đóng file database nếu test đã mở (Windows không xoá file đang mở)
         shutil.rmtree(self.data_dir, ignore_errors=True)
 
     def connect(self) -> Client:
@@ -354,6 +357,54 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(c.recv_msg()["requestId"], "q")
         with self.assertRaises((EOFError, ConnectionError)):  # đóng luôn, không có PING_RESPONSE
             c.recv_msg(timeout=2)
+
+    # --- online/offline (Huy, bước 8) ------------------------------------------
+
+    def seed_room(self, room: str, *members: str) -> None:
+        """Tạo phòng thẳng trong file database của server (chưa có lệnh CREATE_ROOM của Khôi).
+
+        Các tài khoản phải được REGISTER trước (khoá ngoại). Server và test là hai tiến trình
+        cùng mở một file SQLite; SQLite tự khoá file nên an toàn.
+        """
+        storage.init_db(os.path.join(self.data_dir, "chat.db"))
+        storage.create_room(room, members[0])
+        for m in members[1:]:
+            storage.add_member(room, m)
+
+    def roommates_online(self) -> tuple[Client, Client]:
+        """kiet và huy chung phòng `lab`; kiet đăng nhập trước, huy sau. Trả (kiet, huy)."""
+        kiet = self.connect()
+        for n in ("kiet", "huy"):
+            self.register(kiet, n)
+        self.seed_room("lab", "kiet", "huy")
+        self.assertEqual(self.send_login(kiet, "kiet")["data"]["rooms"], ["lab"])
+        huy = self.login("huy", register=False)
+        return kiet, huy
+
+    def test_login_notifies_roommates(self):
+        kiet, huy = self.roommates_online()
+        self.assertEqual(kiet.recv_msg(), {"command": "NOTIFY_ONLINE", "data": {"username": "huy"}})
+        self.assertNoMessage(huy)  # không báo cho chính mình
+
+    def test_abrupt_disconnect_notifies_offline(self):
+        kiet, huy = self.roommates_online()
+        kiet.recv_msg()  # NOTIFY_ONLINE của huy
+        huy.sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+        huy.close()  # RST, giống bị kill
+        self.assertEqual(kiet.recv_msg(), {"command": "NOTIFY_OFFLINE", "data": {"username": "huy"}})
+
+    def test_quit_notifies_offline(self):
+        kiet, huy = self.roommates_online()
+        kiet.recv_msg()
+        self.request(huy, "QUIT", {})
+        self.assertEqual(kiet.recv_msg(), {"command": "NOTIFY_OFFLINE", "data": {"username": "huy"}})
+
+    def test_not_logged_in_disconnect_notifies_nobody(self):
+        kiet, huy = self.roommates_online()
+        kiet.recv_msg()
+        stranger = self.connect()
+        stranger.close()
+        self.assertNoMessage(kiet)
 
     # --- tin nhắn (bước 7, dùng phòng giả "lab") ------------------------------
 

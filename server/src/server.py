@@ -24,7 +24,7 @@ import handlers  # noqa: F401  (import để các file handler đăng ký lệnh
 from dispatch import dispatch
 from session import Session
 import storage
-from stubs import cleanup  # TẠM: thay bằng cleanup() thật của Huy
+from presence import cleanup
 
 log = logging.getLogger("server")
 

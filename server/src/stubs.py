@@ -5,30 +5,13 @@ bản thật xong thì đổi dòng import ở nơi dùng và xoá hàm tương 
 
 | Hàm ở đây                         | Bản thật           | Nơi đang import             |
 |-----------------------------------|--------------------|-----------------------------|
-| cleanup                           | Huy                | server.py                   |
 | room_exists, is_member,           | rooms.py (Khôi)    | handlers/messages.py        |
 | members_of, lock                  |                    | (`import stubs as rooms`)   |
 """
 
 import threading
 
-from session import Session, registry
-
-
-# ---------------------------------------------------------------------------
-# cleanup (Huy, kiet-context 10.6)
-# ---------------------------------------------------------------------------
-
-
-def cleanup(session: Session) -> None:
-    """Giả cho cleanup(session) của Huy.
-
-    Bản giả: gỡ khỏi danh sách online (nếu đã đăng nhập) rồi đóng socket.
-    Bản thật của Huy thêm: nếu unbind trả True thì báo offline cho các phòng liên quan.
-    """
-    if session.username is not None:
-        registry.unbind(session.username, session)
-    session.close()
+from session import registry
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ PING: bản tối thiểu do Kiệt viết ở khung bước 6 để khung có m
 import re
 
 import auth
+import presence
 import storage
 from dispatch import CommandError, Reply, command, require
 from session import registry
@@ -65,7 +66,10 @@ def login(session, payload):
         raise CommandError(protocol.CONFLICT, "Tài khoản đang online ở kết nối khác")
 
     # Thành viên phòng giữ lại qua các lần đăng nhập: trả luôn để client hiện danh sách phòng.
-    return Reply(data={"username": username, "rooms": storage.rooms_of_user(username)})
+    # Báo online cho bạn cùng phòng SAU response (Reply.after): người đăng nhập nhận
+    # LOGIN_RESPONSE trước, rồi mới tới lượt người khác nhận NOTIFY_ONLINE.
+    return Reply(data={"username": username, "rooms": storage.rooms_of_user(username)},
+                 after=[lambda: presence.notify_online(username)])
 
 
 @command(protocol.QUIT, auth=False)

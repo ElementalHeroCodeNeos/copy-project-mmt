@@ -33,6 +33,8 @@ ROOM_MSG = "ROOM_MSG"
 PRIVATE_MSG = "PRIVATE_MSG"
 NOTIFY_ROOM_MSG = "NOTIFY_ROOM_MSG"
 NOTIFY_PRIVATE_MSG = "NOTIFY_PRIVATE_MSG"
+NOTIFY_ONLINE = "NOTIFY_ONLINE"    # Huy: bạn cùng phòng vừa đăng nhập, data {username}
+NOTIFY_OFFLINE = "NOTIFY_OFFLINE"  # Huy: bạn cùng phòng vừa ngắt/QUIT, data {username}
 ERROR = "ERROR"
 
 RESPONSE_SUFFIX = "_RESPONSE"
