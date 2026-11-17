@@ -437,8 +437,52 @@ class ServerTest(ServerHarness):
         self.assertEqual(msg["data"]["members"], [{"username": "kiet", "online": True},
                                                   {"username": "huy", "online": True}])
 
-    # --- tin nhắn (bước 7, dùng phòng giả "lab") ------------------------------
+    # --- phòng (Khôi, bước 16) -------------------------------------------------
 
+    def test_create_join_leave_room(self):
+        a, b = self.logins("khoi", "huy")
+        msg = self.request(a, "CREATE_ROOM", {"room": "lab"})
+        self.assertEqual((msg["command"], msg["code"], msg["data"]),
+                         ("CREATE_ROOM_RESPONSE", 201, {"room": "lab"}))
+        msg = self.request(b, "JOIN_ROOM", {"room": "lab"})
+        self.assertEqual((msg["code"], msg["data"]), (200, {"room": "lab", "members": ["khoi", "huy"]}))
+        msg = self.request(b, "LIST_ROOMS", {})
+        self.assertEqual(msg["data"], {"rooms": [{"name": "lab", "members": 2, "joined": True}]})
+        self.assertEqual(self.request(a, "LEAVE_ROOM", {"room": "lab"})["data"],
+                         {"room": "lab", "deleted": False})
+        self.assertEqual(self.request(b, "LEAVE_ROOM", {"room": "lab"})["data"],
+                         {"room": "lab", "deleted": True})  # người cuối rời: phòng tự xoá
+        self.assertEqual(self.request(a, "LIST_ROOMS", {})["data"], {"rooms": []})
+
+    def test_room_errors(self):
+        a, b = self.logins("khoi", "huy")
+        self.assertEqual(self.request(a, "CREATE_ROOM", {"room": "Lab!"})["code"], 400)
+        self.assertEqual(self.request(a, "CREATE_ROOM", {})["code"], 400)
+        self.request(a, "CREATE_ROOM", {"room": "lab"})
+        self.assertEqual(self.request(b, "CREATE_ROOM", {"room": "lab"})["code"], 409)
+        self.assertEqual(self.request(a, "JOIN_ROOM", {"room": "lab"})["code"], 409)  # đã ở trong
+        self.assertEqual(self.request(b, "JOIN_ROOM", {"room": "khong_co"})["code"], 404)
+        self.assertEqual(self.request(b, "LEAVE_ROOM", {"room": "lab"})["code"], 403)
+        self.assertEqual(self.request(b, "LEAVE_ROOM", {"room": "khong_co"})["code"], 404)
+        self.assertEqual(self.request(self.connect(), "LIST_ROOMS", {})["code"], 401)
+
+    def test_membership_survives_reconnect(self):
+        a = self.login("khoi")
+        self.request(a, "CREATE_ROOM", {"room": "lab"})
+        self.request(a, "QUIT", {})
+        self.assertTrue(a.wait_closed(2))
+        a.close()
+        self.clients.remove(a)
+        a = self.connect()
+        self.assertEqual(self.send_login(a, "khoi")["data"]["rooms"], ["lab"])
+
+    def join_lab(self, owner: Client, *others: Client) -> None:
+        """owner tạo phòng lab, những người còn lại tham gia."""
+        self.assertEqual(self.request(owner, "CREATE_ROOM", {"room": "lab"})["code"], 201)
+        for c in others:
+            self.assertEqual(self.request(c, "JOIN_ROOM", {"room": "lab"})["code"], 200)
+
+    # --- tin nhắn (Kiệt, bước 7; phòng thật từ bước 16) -----------------------
 
     def test_room_msg_requires_login(self):
         c = self.connect()
@@ -447,6 +491,7 @@ class ServerTest(ServerHarness):
 
     def test_room_msg_reaches_all_members_response_first(self):
         a, b, c = self.logins("kiet", "khoi", "huy")
+        self.join_lab(a, b, c)
         a.send(encode({"command": "ROOM_MSG", "requestId": "r1",
                        "payload": {"room": "lab", "content": "Chào cả nhóm"}}))
         resp = a.recv_msg()  # người gửi nhận response TRƯỚC push
@@ -490,12 +535,18 @@ class ServerTest(ServerHarness):
 
     def test_dead_member_does_not_block_room(self):
         a, b, c = self.logins("kiet", "khoi", "huy")
+        self.join_lab(a, b, c)
         b.sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
         b.close()  # khoi chết đột ngột (RST)
         time.sleep(0.3)
         a.send(encode({"command": "ROOM_MSG", "payload": {"room": "lab", "content": "còn ai không"}}))
-        self.assertEqual(a.recv_msg()["code"], 200)
-        self.assertEqual(c.recv_msg()["data"]["content"], "còn ai không")
+        # a và c là bạn cùng phòng của khoi nên có thể nhận NOTIFY_OFFLINE trước: bỏ qua.
+        msgs = [a.recv_msg() for _ in range(2)]
+        self.assertIn(("ROOM_MSG_RESPONSE", 200), [(m["command"], m.get("code")) for m in msgs])
+        msg = c.recv_msg()
+        if msg["command"] == "NOTIFY_OFFLINE":
+            msg = c.recv_msg()
+        self.assertEqual(msg["data"]["content"], "còn ai không")
 
     def test_username_freed_after_disconnect(self):
         a = self.login("kiet")

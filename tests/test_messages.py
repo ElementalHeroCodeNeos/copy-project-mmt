@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "server" / "src"
 
 import handlers  # noqa: E402,F401  (đăng ký ROOM_MSG, PRIVATE_MSG, LOGIN, PING)
 from handlers import messages  # noqa: E402
+import storage  # noqa: E402
 from dispatch import dispatch  # noqa: E402
 from session import registry  # noqa: E402
 
@@ -38,6 +39,12 @@ def room_msg(content="hi", room="lab"):
 
 
 class RoomMsgTest(unittest.TestCase):
+    def setUp(self):
+        # Phòng thật trong database bộ nhớ (trước bước 16 dùng phòng giả trong stubs.py).
+        storage.init_db(":memory:")
+        storage.create_user("kiet", "h", "s")
+        storage.create_room("lab", "kiet")
+
     def test_ts_format(self):
         self.assertRegex(messages._now_ts(), TS_FORMAT)
 

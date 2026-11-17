@@ -46,6 +46,7 @@ class ManyClientsTest(ServerHarness):
         errors: list[str] = []
         lock = threading.Lock()
         all_ready = threading.Barrier(N_CLIENTS)
+        joined = threading.Barrier(N_CLIENTS)
 
         def run(name):
             try:
@@ -56,13 +57,19 @@ class ManyClientsTest(ServerHarness):
                 # (thời gian chờ mặc định của test), nên cho chờ tới 30 s.
                 assert self.register(c, name, timeout=30)["code"] == 201
                 assert self.send_login(c, name, timeout=30)["code"] == 200
-                all_ready.wait(timeout=60)  # mọi người online rồi mới nhắn
+                if name == names[0]:
+                    assert self.request(c, "CREATE_ROOM", {"room": "lab"})["code"] == 201
+                all_ready.wait(timeout=60)  # mọi người online và phòng đã có
+                if name != names[0]:         # 29 người cùng JOIN_ROOM một lúc
+                    assert self.request(c, "JOIN_ROOM", {"room": "lab"}, timeout=30)["code"] == 200
+                joined.wait(timeout=60)      # mọi người đã vào phòng rồi mới nhắn
                 c.send(encode({"command": "ROOM_MSG", "requestId": name,
                                "payload": {"room": "lab", "content": f"chào từ {name}"}}))
             except Exception as exc:  # noqa: BLE001
                 with lock:
                     errors.append(f"{name}: {exc!r}")
                 all_ready.abort()
+                joined.abort()
 
         start = time.monotonic()
         threads = [threading.Thread(target=run, args=(n,)) for n in names]

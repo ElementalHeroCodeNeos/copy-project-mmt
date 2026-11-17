@@ -6,7 +6,7 @@ Không lưu tin nhắn (scope đã thu hẹp): server chỉ chuyển tiếp tớ
 from datetime import datetime, timezone
 
 import config
-import stubs as rooms        # TẠM: đổi thành `import rooms` khi Khôi xong rooms.py
+import rooms
 from dispatch import CommandError, Reply, command, require
 from session import broadcast, registry
 from shared import protocol
