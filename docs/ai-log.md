@@ -34,6 +34,7 @@
 | 19 | 2026-11-17 | Đặng Tuấn Kiệt | Claude | Cập nhật protocol-design theo khung server | Sửa mục 3.1–3.4, 4.2, 5, 6.4–6.6: PING_RESPONSE thay PONG, định dạng `ts`, `requestId` phải là chuỗi, thiếu `payload` → 400, thứ tự gửi của PRIVATE_MSG, message tiếng Việt |  | docs/protocol-design.md |
 | 20 | 2026-11-18 | Đặng Tuấn Kiệt | Claude | Bước 13: architecture.md — mô hình đồng thời và khoá | Mục 1–4, 6: sơ đồ luồng server, so sánh mô hình kèm số đo thật, bảng 7 loại dữ liệu dùng chung và khoá, thứ tự khoá, đánh đổi thứ tự tin, vòng đời kết nối, 9 quyết định thiết kế; chừa dòng phòng (Khôi) và mục Deployment (Huy) |  | docs/architecture.md |
 | 21 | 2026-11-18 | Đặng Tuấn Kiệt | Claude | Bước 24: xoá stubs.py | Kiểm tra không còn import stubs, xoá file, chạy lại test liên quan |  | server/src/stubs.py |
+| 22 | 2026-11-18 | Đặng Tuấn Kiệt | Claude | Bước 25: README, chạy checklist nộp bài | Chạy khởi động sạch (down -v, up --build), smoke test, load test, client trong Docker, kiểm tra biến môi trường; README mục 3–6 với output thật, sửa chỗ còn nói gửi file; không điền mục 8, 9 |  | README.md |
  
 # Log của Hà Anh Khôi
 | # | Date | Member | Tool / model | Task — what you asked | What AI produced | What you kept, changed or rejected — and how you verified it | Files |
