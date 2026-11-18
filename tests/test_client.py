@@ -3,8 +3,10 @@
     python -m unittest tests.test_client -v
 """
 
+import os
 import queue
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -13,9 +15,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "client" / "src"))
-from test_server import ServerHarness  # noqa: E402
+from test_server import ROOT, ServerHarness  # noqa: E402
 
+from commands import parse  # noqa: E402
 from connection import Connection  # noqa: E402
+from display import format_message  # noqa: E402
+
+CLIENT = ROOT / "client" / "src" / "client.py"
 
 
 class Recorder:
@@ -104,6 +110,104 @@ class ConnectionTest(ServerHarness):
         got = [rec.messages.get(timeout=5) for _ in range(200)]
         self.assertTrue(all(m["command"] == "PING_RESPONSE" for m in got))
         self.assertEqual(len({m["requestId"] for m in got}), 200)
+
+
+class ParseTest(unittest.TestCase):
+    """commands.parse (bước 22)."""
+
+    def test_plain_text_goes_to_current_room(self):
+        a = parse("  chào cả nhóm  ", "lab")
+        self.assertEqual((a.kind, a.command, a.payload),
+                         ("send", "ROOM_MSG", {"room": "lab", "content": "  chào cả nhóm  "}))
+        self.assertEqual(parse("chào", None).kind, "error")  # chưa chọn phòng
+
+    def test_commands(self):
+        cases = {
+            "/login huy matkhau123": ("LOGIN", {"username": "huy", "password": "matkhau123"}),
+            "/join lab": ("JOIN_ROOM", {"room": "lab"}),
+            "/rooms": ("LIST_ROOMS", {}),
+            "/msg kiet tối nay  họp nhé": ("PRIVATE_MSG", {"to": "kiet", "content": "tối nay  họp nhé"}),
+            "/members": ("LIST_MEMBERS", {"room": "lab"}),  # mặc định phòng hiện tại
+        }
+        for line, (command, payload) in cases.items():
+            a = parse(line, "lab")
+            self.assertEqual((a.kind, a.command, a.payload), ("send", command, payload), line)
+
+    def test_local_and_errors(self):
+        self.assertEqual((parse("/use web", "lab").kind, parse("/use web", "lab").room), ("use", "web"))
+        self.assertEqual(parse("/quit", None).kind, "quit")
+        self.assertEqual(parse("", None).kind, "none")
+        for bad in ("/join", "/msg kiet", "/khong_co", "/login huy"):
+            self.assertEqual(parse(bad, "lab").kind, "error", bad)
+
+
+class DisplayTest(unittest.TestCase):
+    """display.format_message (bước 22)."""
+
+    def test_room_and_private_messages_have_prefix(self):
+        msg = {"command": "NOTIFY_ROOM_MSG",
+               "data": {"room": "lab", "from": "kiet", "content": "hi", "ts": "2026-11-15T09:00:00Z"}}
+        self.assertRegex(format_message(msg), r"^\[\d\d:\d\d\] \[lab\] kiet: hi$")
+        msg = {"command": "NOTIFY_PRIVATE_MSG",
+               "data": {"from": "kiet", "to": "huy", "content": "hi", "ts": "2026-11-15T09:00:00Z"}}
+        self.assertIn("[riêng] kiet → bạn: hi", format_message(msg))
+
+    def test_private_msg_response_shows_what_was_sent(self):
+        msg = {"command": "PRIVATE_MSG_RESPONSE", "code": 200, "data": {"ts": "2026-11-15T09:00:00Z"}}
+        sent = {"command": "PRIVATE_MSG", "payload": {"to": "huy", "content": "hi"}}
+        self.assertIn("[riêng] bạn → huy: hi", format_message(msg, sent))
+
+    def test_errors_and_silent_responses(self):
+        msg = {"command": "JOIN_ROOM_RESPONSE", "code": 404, "message": "Phòng x không tồn tại"}
+        self.assertEqual(format_message(msg), "!! Phòng x không tồn tại (404)")
+        self.assertIsNone(format_message({"command": "ROOM_MSG_RESPONSE", "code": 200, "data": {}}))
+        self.assertIsNone(format_message({"command": "PING_RESPONSE", "code": 200, "data": {}}))
+
+
+class ClientProgramTest(ServerHarness):
+    """Chạy hai tiến trình client.py thật, gõ lệnh qua stdin (bước 22)."""
+
+    ENV = {"READ_TIMEOUT_SEC": "30"}
+
+    def run_client(self, lines: list[str], delay: float = 0) -> subprocess.Popen:
+        env = dict(os.environ, CLIENT_TARGET_HOST="127.0.0.1", CLIENT_TARGET_PORT=str(self.port),
+                   PYTHONPATH=str(ROOT), PYTHONIOENCODING="utf-8")
+        proc = subprocess.Popen([sys.executable, "-u", str(CLIENT)], env=env, text=True,
+                                encoding="utf-8", stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT)
+        self.addCleanup(proc.kill)
+
+        def feed():
+            for line in lines:
+                if line.startswith("#sleep "):
+                    time.sleep(float(line.split()[1]))
+                    continue
+                proc.stdin.write(line + "\n")
+                proc.stdin.flush()
+            proc.stdin.close()
+
+        threading.Thread(target=feed, daemon=True).start()
+        return proc
+
+    def test_two_clients_chat_in_room_and_private(self):
+        khoi = self.run_client(["/register khoi matkhau123", "/login khoi matkhau123",
+                                "/create lab", "#sleep 3", "chào huy", "#sleep 1.5", "/quit"])
+        huy = self.run_client(["#sleep 1.5", "/register huy matkhau123", "/login huy matkhau123",
+                               "/join lab", "#sleep 2", "/msg khoi nhận rồi", "#sleep 1", "/quit"])
+        # Không dùng communicate(): nó đóng stdin ngay, client tưởng người dùng đã gõ hết và thoát.
+        khoi.wait(timeout=20)
+        huy.wait(timeout=20)
+        out_khoi, out_huy = khoi.stdout.read(), huy.stdout.read()
+        khoi.stdout.close()
+        huy.stdout.close()
+        self.assertIn("Đã tạo phòng lab", out_khoi)
+        self.assertIn("* huy vào phòng lab", out_khoi)
+        self.assertRegex(out_huy, r"\[lab\] khoi: chào huy")      # tin phòng có tiền tố phòng
+        self.assertIn("[riêng] huy → bạn: nhận rồi", out_khoi)    # tin riêng
+        self.assertIn("[riêng] bạn → khoi: nhận rồi", out_huy)
+        for out in (out_khoi, out_huy):  # QUIT là thoát bình thường, không phải mất kết nối
+            self.assertIn("Đã thoát.", out)
+            self.assertNotIn("Mất kết nối", out)
 
 
 if __name__ == "__main__":

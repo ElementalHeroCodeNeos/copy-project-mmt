@@ -42,6 +42,7 @@ class Connection:
         self._send_lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._stopped = threading.Event()     # đã dừng (mất kết nối hoặc tự đóng)
+        self._quitting = False                # đã gửi QUIT: server đóng kết nối là bình thường
         self._ids = itertools.count(1)
 
     # --- mở / đóng ------------------------------------------------------------
@@ -67,9 +68,21 @@ class Connection:
 
     # --- gửi --------------------------------------------------------------------
 
-    def request(self, command: str, payload: dict | None = None) -> str | None:
-        """Gửi một request kèm requestId tự tăng. Trả requestId, hoặc None nếu gửi thất bại."""
-        rid = str(next(self._ids))
+    def next_id(self) -> str:
+        """requestId mới (tự tăng; itertools.count an toàn khi nhiều luồng gọi trong CPython)."""
+        return str(next(self._ids))
+
+    def request(self, command: str, payload: dict | None = None, rid: str | None = None) -> str | None:
+        """Gửi một request kèm requestId. Trả requestId, hoặc None nếu gửi thất bại.
+
+        Muốn ghi nhớ request TRƯỚC khi response kịp về (luồng đọc chạy song song) thì lấy
+        `rid = next_id()`, ghi nhớ, rồi mới gọi `request(..., rid=rid)`.
+        """
+        rid = rid or self.next_id()
+        if command == protocol.QUIT:
+            # Server trả QUIT_RESPONSE rồi đóng kết nối ngay; luồng đọc có thể thấy EOF trước khi
+            # luồng chính kịp gọi close(). Đánh dấu trước để EOF đó không bị báo là mất kết nối.
+            self._quitting = True
         ok = self.send({"command": command, "requestId": rid, "payload": payload or {}})
         return rid if ok else None
 
@@ -135,7 +148,8 @@ class Connection:
                 return  # đã dừng (đã báo, hoặc người dùng tự đóng sau QUIT)
             self._stopped.set()
         self._close_socket()
-        self.on_disconnect(reason)
+        if not self._quitting:
+            self.on_disconnect(reason)
 
     def _close_socket(self) -> None:
         try:

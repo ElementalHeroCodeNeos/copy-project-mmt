@@ -100,10 +100,14 @@ class ManyClientsTest(ServerHarness):
         self.assertIsNone(self.proc.poll(), "server đã chết")
 
 
-class FailureTest(ServerHarness):
-    """Client bị kill, im lặng, gửi rác: server dọn phiên, báo offline, vẫn phục vụ người khác."""
+class KilledClientTest(ServerHarness):
+    """Tiến trình client bị kill -9: server dọn phiên, báo offline, vẫn phục vụ người khác.
 
-    ENV = {"MAX_CLIENTS": "5", "READ_TIMEOUT_SEC": "2"}
+    READ_TIMEOUT_SEC=30: trong lúc tiến trình con khởi động và đăng nhập (máy bận có thể quá 2 s),
+    kiet ngồi im; timeout ngắn thì server ngắt kiet vì im lặng, test hỏng oan.
+    """
+
+    ENV = {"MAX_CLIENTS": "5", "READ_TIMEOUT_SEC": "30"}
 
     def test_killed_client_process_is_cleaned_up(self):
         kiet, huy = self.roommates_online()
@@ -126,6 +130,11 @@ class FailureTest(ServerHarness):
             child.stdout.close()
         self.login("huy", register=False)  # phiên đã dọn: đăng nhập lại được ngay
         self.assertIsNone(self.proc.poll(), "server đã chết")
+
+class FailureTest(ServerHarness):
+    """Client im lặng, gửi rác: server ngắt đúng client đó, vẫn phục vụ người khác."""
+
+    ENV = {"MAX_CLIENTS": "5", "READ_TIMEOUT_SEC": "2"}
 
     def test_silent_logged_in_client_times_out_and_goes_offline(self):
         kiet, huy = self.roommates_online()
